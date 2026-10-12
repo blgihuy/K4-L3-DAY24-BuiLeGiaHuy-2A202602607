@@ -70,7 +70,9 @@ Trích log dòng 1 từ `reports/attack-before.log`:
 ```
 
 **Kết quả sau khi contain (Bước 4):**
-<!-- Sẽ cập nhật sau khi hoàn thành containment ở Bước 4 / CP5 -->
+- Test replay: `tests/test_injection.py::test_variant_blocked_after_containment[1-support_l1]` và `[1-dpo]` đều **PASSED**.
+- Kết quả sink: `reports/attack-after.log` rỗng (0 byte), không có dữ liệu của KH-000999 rò rỉ ra sink.
+- Ghi nhận Ledger: Quyết định `deny` đối với `http_post` với reason `"Egress denied: egress is strictly prohibited when data classification is restricted"`, on_behalf_of=`dpo`.
 
 ---
 
@@ -100,7 +102,9 @@ Trích log dòng 2 từ `reports/attack-before.log`:
 ```
 
 **Kết quả sau khi contain:**
-<!-- Sẽ cập nhật sau khi hoàn thành containment ở Bước 4 / CP5 -->
+- Test replay: `tests/test_injection.py::test_variant_blocked_after_containment[2-support_l1]` và `[2-dpo]` đều **PASSED**.
+- Kết quả sink: `reports/attack-after.log` rỗng (0 byte), không có dữ liệu của KH-000999 rò rỉ ra sink.
+- Ghi nhận Ledger: Quyết định `deny` đối với `http_post` với reason `"Egress denied: egress is strictly prohibited when data classification is restricted"`, on_behalf_of=`dpo`.
 
 ---
 
@@ -129,7 +133,9 @@ Trích log dòng 3 từ `reports/attack-before.log`:
 ```
 
 **Kết quả sau khi contain:**
-<!-- Sẽ cập nhật sau khi hoàn thành containment ở Bước 4 / CP5 -->
+- Test replay: `tests/test_injection.py::test_variant_blocked_after_containment[3-support_l1]` và `[3-dpo]` đều **PASSED**.
+- Kết quả sink: `reports/attack-after.log` rỗng (0 byte), không có dữ liệu của KH-000999 rò rỉ ra sink.
+- Ghi nhận Ledger: Quyết định `deny` đối với `http_post` với reason `"Egress denied: egress is strictly prohibited when data classification is restricted"`, on_behalf_of=`dpo`.
 
 ---
 
@@ -158,7 +164,10 @@ Trích log dòng 4 từ `reports/attack-before.log`:
 ```
 
 **Kết quả sau khi contain:**
-<!-- Sẽ cập nhật sau khi hoàn thành containment ở Bước 4 / CP5 -->
+- Test replay: `tests/test_injection.py::test_variant_blocked_after_containment[4-support_l1]` và `[4-dpo]` đều **PASSED**.
+- Kết quả sink: `reports/attack-after.log` rỗng (0 byte), không có dữ liệu của KH-000999 rò rỉ ra sink.
+- Ghi nhận Ledger: Quyết định `deny` đối với `http_post` với reason `"Egress denied: egress is strictly prohibited when data classification is restricted"`, on_behalf_of=`dpo`.
+
 
 
 ---
