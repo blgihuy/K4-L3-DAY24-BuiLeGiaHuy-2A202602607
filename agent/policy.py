@@ -34,7 +34,18 @@ không phải xác thực người dùng production.
 """
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+PRINCIPALS_PATH = Path(__file__).resolve().parent.parent / "data" / "principals.json"
+
+
+def _load_principals() -> dict:
+    if PRINCIPALS_PATH.exists():
+        return json.loads(PRINCIPALS_PATH.read_text(encoding="utf-8"))
+    return {}
 
 
 @dataclass(frozen=True)
@@ -52,4 +63,81 @@ class PolicyContext:
 
 
 def check(context: PolicyContext) -> tuple[bool, str]:
-    raise NotImplementedError("BƯỚC 3b: implement policy check")
+    """Kiểm tra chính sách bảo mật cho từng tool call (PEP).
+
+    Trả về (allow, reason) với reason không bao giờ rỗng.
+    """
+    # 1. Kiểm tra data_classification hợp lệ
+    valid_classifications = {"public", "internal", "restricted"}
+    if context.data_classification not in valid_classifications:
+        return (
+            False,
+            f"Invalid data_classification: {context.data_classification!r}. Must be one of {valid_classifications}",
+        )
+
+    # 2. Rule TỐI THIỂU bắt buộc: restricted + egress_enabled=True -> DENY tuyệt đối
+    if context.data_classification == "restricted" and context.egress_enabled:
+        return (
+            False,
+            "Egress denied: egress is strictly prohibited when data classification is restricted",
+        )
+
+    # 3. Kiểm tra principal (danh tính người dùng / OBO)
+    principals = _load_principals()
+    if not context.principal_id or context.principal_id not in principals:
+        return False, f"Unknown or missing principal: {context.principal_id!r}"
+
+    principal_info = principals[context.principal_id]
+
+    # 4. Kiểm tra thời hạn cấp quyền (expires_at) theo UTC
+    if not context.expires_at:
+        return False, "Missing expires_at timestamp for delegation/token"
+    try:
+        exp_dt = datetime.fromisoformat(context.expires_at)
+        if exp_dt.tzinfo is None:
+            exp_dt = exp_dt.replace(tzinfo=timezone.utc)
+        now_dt = datetime.now(timezone.utc)
+        if exp_dt <= now_dt:
+            return (
+                False,
+                f"Principal token expired at {context.expires_at} (current UTC: {now_dt.isoformat()})",
+            )
+    except Exception as exc:
+        return False, f"Invalid expires_at format {context.expires_at!r}: {exc}"
+
+    # 5. Kiểm tra mục đích (request_purpose)
+    allowed_purposes = principal_info.get("purposes", [])
+    if context.request_purpose not in allowed_purposes:
+        return (
+            False,
+            f"Purpose {context.request_purpose!r} not permitted for principal {context.principal_id}",
+        )
+
+    # 6. Kiểm tra quyền hạn gọi tool (giao giữa principal.allowed_tools và agent_scopes)
+    tool = context.requested_tool
+    if not tool:
+        return False, "Missing requested_tool"
+
+    allowed_tools = principal_info.get("allowed_tools", [])
+    if tool not in allowed_tools:
+        return (
+            False,
+            f"Tool {tool!r} not in allowed_tools for principal {context.principal_id}",
+        )
+
+    if not context.agent_scopes or tool not in context.agent_scopes:
+        return False, f"Tool {tool!r} exceeds agent_scopes {context.agent_scopes}"
+
+    # Nếu delegation_depth > 0, quyền phải nằm trong cả parent_scopes
+    if context.delegation_depth > 0:
+        if not context.parent_scopes or tool not in context.parent_scopes:
+            return (
+                False,
+                f"Delegation depth {context.delegation_depth}: tool {tool!r} exceeds parent_scopes {context.parent_scopes}",
+            )
+
+    # 7. Cho phép khi mọi điều kiện đều hợp lệ
+    return (
+        True,
+        f"Allowed: {context.principal_id} is authorized for {tool} (purpose: {context.request_purpose})",
+    )

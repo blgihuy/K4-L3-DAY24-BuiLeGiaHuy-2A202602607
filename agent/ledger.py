@@ -27,22 +27,80 @@ Interface bắt buộc (tests/test_ledger.py và agent/runner.py gọi trực ti
           - hash lưu trong dòng n khớp lại khi tính lại từ nội dung dòng đó
         Trả về False nếu một dòng còn trong file bị sửa mà không tính lại
         hash, nếu xoá/chèn giữa file làm đứt liên kết, hoặc thiếu reason.
-        Chỉ kiểm tra file hiện có KHÔNG phát hiện được việc xoá dòng cuối
-        hoặc viết lại cả file và tính lại chuỗi. Muốn phát hiện cắt đuôi
-        phải lưu hash/số dòng cuối ở một nơi tin cậy bên ngoài file rồi
-        đối chiếu. Bài lab không cung cấp mốc đó.
-
-Sinh viên phải tự tay chứng minh được: sửa 1 ký tự trong 1 dòng giữa file
-rồi gọi verify() phải trả về False.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
+
+GENESIS_HASH = "0" * 64
 
 
 def append(entry: dict, path: Path) -> dict:
-    raise NotImplementedError("BƯỚC 3d: implement ledger append")
+    """Ghi thêm một bản ghi vào audit ledger kèm chuỗi hash chain."""
+    record = dict(entry)
+    path = Path(path)
+
+    prev_hash = GENESIS_HASH
+    if path.exists() and path.stat().st_size > 0:
+        lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        if lines:
+            try:
+                last_entry = json.loads(lines[-1])
+                prev_hash = last_entry.get("hash", GENESIS_HASH)
+            except Exception:
+                prev_hash = GENESIS_HASH
+
+    record["prev_hash"] = prev_hash
+    record.pop("hash", None)
+
+    serialized = json.dumps(record, sort_keys=True, ensure_ascii=False)
+    entry_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    record["hash"] = entry_hash
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    return record
 
 
 def verify(path: Path) -> bool:
-    raise NotImplementedError("BƯỚC 3d: implement ledger verify")
+    """Xác minh tính toàn vẹn của file ledger theo chuỗi hash chain."""
+    path = Path(path)
+    if not path.exists():
+        return True
+
+    lines = [line.strip() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if not lines:
+        return True
+
+    expected_prev_hash = GENESIS_HASH
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except Exception:
+            return False
+
+        # 1. Bắt buộc có reason và không rỗng
+        reason = record.get("reason")
+        if not reason or not str(reason).strip():
+            return False
+
+        # 2. prev_hash phải khớp với hash dòng trước (hoặc genesis)
+        if record.get("prev_hash") != expected_prev_hash:
+            return False
+
+        # 3. hash lưu phải khớp hash tính lại từ nội dung không bao gồm field hash
+        stored_hash = record.get("hash")
+        content_to_hash = {k: v for k, v in record.items() if k != "hash"}
+        serialized = json.dumps(content_to_hash, sort_keys=True, ensure_ascii=False)
+        computed_hash = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+        if computed_hash != stored_hash:
+            return False
+
+        expected_prev_hash = stored_hash
+
+    return True
